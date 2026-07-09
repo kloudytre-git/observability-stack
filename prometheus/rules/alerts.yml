@@ -1,0 +1,47 @@
+groups:
+  - name: alerting_rules
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} on {{ $labels.instance }} is down"
+          description: "Target {{ $labels.instance }} for job {{ $labels.job }} has been unreachable for more than 1 minute."
+
+      - alert: HighCpuUsage
+        expr: instance:node_cpu_utilisation:rate5m > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU utilisation is {{ printf \"%.1f\" $value }}% (threshold 85%) for over 5 minutes."
+
+      - alert: HighMemoryUsage
+        expr: instance:node_memory_utilisation:ratio * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory utilisation is {{ printf \"%.1f\" $value }}% (threshold 90%) for over 5 minutes."
+
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }} ({{ $labels.mountpoint }})"
+          description: "Less than 10% free space remaining."
+
+      - alert: HighRequestLatency
+        expr: job:app_request_latency:p95_5m > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P95 latency for {{ $labels.endpoint }}"
+          description: "P95 request latency is {{ printf \"%.2f\" $value }}s (threshold 1s)."

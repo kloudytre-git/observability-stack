@@ -1,0 +1,192 @@
+networks:
+  observability:
+    driver: bridge
+
+services:
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    user: root
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    networks:
+      - observability
+
+  alertmanager:
+    image: prom/alertmanager
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    networks:
+      - observability
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=changeme
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards/json
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - observability
+
+  loki:
+    image: grafana/loki:2.9.8
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml
+    command:
+      - --config.file=/etc/loki/local-config.yaml
+    networks:
+      - observability
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    container_name: promtail
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - --config.file=/etc/promtail/promtail-config.yml
+    depends_on:
+      - loki
+    networks:
+      - observability
+
+  node-exporter:
+    image: prom/node-exporter
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    labels:
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=9100"
+      - "prometheus.io/job=node_exporter"
+    networks:
+      - observability
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:80"
+    networks:
+      - observability
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter
+    container_name: nginx-exporter
+    command:
+      - --nginx.scrape-uri=http://nginx:8080/stub_status
+    ports:
+      - "9113:9113"
+    depends_on:
+      - nginx
+    labels:
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=9113"
+      - "prometheus.io/job=nginx_exporter"
+    networks:
+      - observability
+
+  mysql:
+    image: mysql:8
+    container_name: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+      - MYSQL_DATABASE=app
+    ports:
+      - "3306:3306"
+    networks:
+      - observability
+
+  mysqld-exporter:
+    image: prom/mysqld-exporter
+    container_name: mysqld-exporter
+    volumes:
+      - ./mysqld-exporter/.my.cnf:/etc/.my.cnf:ro
+    command:
+      - --config.my-cnf=/etc/.my.cnf
+    ports:
+      - "9104:9104"
+    depends_on:
+      - mysql
+    labels:
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=9104"
+      - "prometheus.io/job=mysqld_exporter"
+    networks:
+      - observability
+
+  mongo:
+    image: mongo:6
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    networks:
+      - observability
+
+  mongodb-exporter:
+    image: percona/mongodb_exporter:0.40
+    container_name: mongodb-exporter
+    command:
+      - --mongodb.uri=mongodb://mongo:27017
+    ports:
+      - "9216:9216"
+    depends_on:
+      - mongo
+    labels:
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=9216"
+      - "prometheus.io/job=mongodb_exporter"
+    networks:
+      - observability
+
+  sample-app:
+    build: ./app
+    container_name: sample-app
+    ports:
+      - "8000:8000"
+    labels:
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=8000"
+      - "prometheus.io/job=sample_app"
+    networks:
+      - observability
+
+volumes:
+  grafana-data:

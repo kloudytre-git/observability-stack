@@ -1,0 +1,15 @@
+groups:
+  - name: recording_rules
+    interval: 30s
+    rules:
+      - record: instance:node_cpu_utilisation:rate5m
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      - record: instance:node_memory_utilisation:ratio
+        expr: 1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+
+      - record: job:app_requests:rate5m
+        expr: sum by (job, endpoint) (rate(app_requests_total[5m]))
+
+      - record: job:app_request_latency:p95_5m
+        expr: histogram_quantile(0.95, sum by (le, job, endpoint) (rate(app_request_latency_seconds_bucket[5m])))
