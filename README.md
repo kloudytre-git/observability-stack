@@ -4,4 +4,8 @@ Transform black-box systems into observable infrastructure. I will deploy Promet
 ## Install Prometheus
 > sudo apt update
 
-> wget https://github.com/prometheus/prometheus/releases/latest/download/prometheus-*.linux-amd64.tar.gz
+> docker run -d --name prometheus -p 9090:9090 prom/prometheus
+
+> prometheus --version
+
+## Install Node Exporter
